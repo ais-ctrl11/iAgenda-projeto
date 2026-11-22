@@ -5,13 +5,14 @@ import { addDays, format, startOfMonth, startOfYear, subMonths, subYears, getDay
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ENTRY_LABEL, activityCount, toISODate, useStore, type AppData, type EntryType } from "@/lib/store";
+import { ENTRY_LABEL, toISODate, useStore, type AppData, type EntryType } from "@/lib/store";
 import { ENTRY_FILL, PageHeader, Section } from "@/components/app/shared";
 import { DayRecords } from "@/components/app/day-records";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { appointmentHasPassed } from "@/lib/calendar-math";
 import { comparisonPeriods, dailyWaterAverage } from "@/lib/statistics-math";
+import { activityCountsByDate, sleepWaterBuckets } from "@/lib/records-index";
 
 export const Route = createFileRoute("/_authenticated/estatisticas")({
   head: () => ({
@@ -56,20 +57,21 @@ function Estatisticas() {
   // Line series: per day (<=90) or per month (365)
   const series = useMemo(() => {
     const pts: { label: string; sleep: number | null; water: number }[] = [];
+    const average = (b?: { sleepSum: number; sleepCount: number }) => (b?.sleepCount ? b.sleepSum / b.sleepCount : null);
     if (period <= 90) {
+      const byDay = sleepWaterBuckets(data.entries, (date) => date);
       for (let i = 0; i < period; i++) {
-        const iso = toISODate(addDays(from, i));
-        const sl = data.entries.filter((e) => e.type === "sono" && e.date === iso && e.value);
-        pts.push({ label: format(addDays(from, i), "d/MM"), sleep: sl.length ? sl.reduce((s, e) => s + (e.value ?? 0), 0) / sl.length : null,
-          water: data.entries.filter((e) => e.type === "agua" && e.date === iso).reduce((s, e) => s + (e.value ?? 1), 0) });
+        const day = addDays(from, i);
+        const bucket = byDay.get(toISODate(day));
+        pts.push({ label: format(day, "d/MM"), sleep: average(bucket), water: bucket?.water ?? 0 });
       }
     } else {
+      const byMonth = sleepWaterBuckets(data.entries, (date) => date.slice(0, 7));
       for (let i = 11; i >= 0; i--) {
-        const m = subMonths(startOfMonth(now), i); const key = format(m, "yyyy-MM");
-        const sl = data.entries.filter((e) => e.type === "sono" && e.date.startsWith(key) && e.value);
+        const m = subMonths(startOfMonth(now), i);
+        const bucket = byMonth.get(format(m, "yyyy-MM"));
         const days = i === 0 ? now.getDate() : getDaysInMonth(m);
-        pts.push({ label: format(m, "MMM", { locale: ptBR }), sleep: sl.length ? sl.reduce((s, e) => s + (e.value ?? 0), 0) / sl.length : null,
-          water: data.entries.filter((e) => e.type === "agua" && e.date.startsWith(key)).reduce((s, e) => s + (e.value ?? 1), 0) / days });
+        pts.push({ label: format(m, "MMM", { locale: ptBR }), sleep: average(bucket), water: (bucket?.water ?? 0) / days });
       }
     }
     return pts;
@@ -206,6 +208,7 @@ const PIXEL = ["bg-pixel-0", "bg-pixel-1", "bg-pixel-2", "bg-pixel-3", "bg-pixel
 function YearInPixels({ data, selected, onSelect }: { data: AppData; selected: string | null; onSelect: (d: string) => void }) {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const today = toISODate(new Date());
+  const counts = useMemo(() => activityCountsByDate(data), [data]);
   return (
     <section className="card-soft p-4 md:p-5" aria-label="Year in Pixels">
       <div className="mb-3 flex items-center justify-between">
@@ -226,7 +229,7 @@ function YearInPixels({ data, selected, onSelect }: { data: AppData; selected: s
                 {Array.from({ length: 31 }, (_, d) => {
                   if (d >= n) return <span key={d} />;
                   const iso = `${year}-${String(m + 1).padStart(2, "0")}-${String(d + 1).padStart(2, "0")}`;
-                  const c = activityCount(data, iso); const lvl = c === 0 ? 0 : c <= 1 ? 1 : c <= 3 ? 2 : c <= 5 ? 3 : 4;
+                  const c = counts.get(iso) ?? 0; const lvl = c === 0 ? 0 : c <= 1 ? 1 : c <= 3 ? 2 : c <= 5 ? 3 : 4;
                   return <button key={d} onClick={() => onSelect(iso)} aria-label={`${d + 1}/${m + 1}: ${c} registros`} title={`${d + 1}/${m + 1} · ${c} registros`}
                     className={cn("aspect-square rounded-[3px] transition hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", PIXEL[lvl], iso > today && "opacity-50", selected === iso && "ring-2 ring-foreground", iso === today && "outline outline-1 outline-primary")} />;
                 })}

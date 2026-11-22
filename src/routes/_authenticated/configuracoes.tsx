@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { LogOut, Send, UserX } from "lucide-react";
 import { deleteMyAccount } from "@/lib/account.functions";
-import { validateBackup } from "@/lib/backup";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,12 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ENTRY_LABEL, appointmentStatus, toISODate, uid, useStore, type AppData, type EntryType } from "@/lib/store";
-import { PageHeader } from "@/components/app/shared";
+import { ENTRY_LABEL, appointmentStatus, restoreData, toISODate, uid, useStore, type AppData, type EntryType } from "@/lib/store";
+import { Field as F, PageHeader } from "@/components/app/shared";
 import { cn } from "@/lib/utils";
 import { AppearanceSettings } from "@/components/app/appearance-settings";
-import { normalizeAppearance } from "@/lib/appearance";
-import { defaultData } from "@/lib/store";
 
 export const Route = createFileRoute("/_authenticated/configuracoes")({
   head: () => ({
@@ -152,9 +149,6 @@ function SectionBody({ k }: { k: Key }) {
   return <Preferences />;
 }
 
-function F({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  return <div className="space-y-1.5"><Label htmlFor={id}>{label}</Label>{children}</div>;
-}
 const inp = "h-11 rounded-xl";
 
 function ProfileForm() {
@@ -187,7 +181,7 @@ function Report({ kind }: { kind: "semanal" | "mensal" }) {
   const habits = data.habits.filter((h) => inR(h.date));
   const appts = data.appointments.filter((x) => inR(x.date) && appointmentHasPassed(x, now));
   const done = appts.filter((x) => x.done).length;
-  const missed = appts.filter((x) => appointmentStatus(x) === "expirado" || appointmentStatus(x) === "atrasado").length;
+  const missed = appts.filter((x) => { const st = appointmentStatus(x); return st === "expirado" || st === "atrasado"; }).length;
   const sleep = entries.filter((e) => e.type === "sono" && e.value);
   const avgSleep = sleep.length ? sleep.reduce((s, e) => s + (e.value ?? 0), 0) / sleep.length : null;
   const badSleep = sleep.filter((e) => e.quality === "ruim").length;
@@ -284,6 +278,12 @@ function Reminders() {
   );
 }
 
+function Row({ id, title, desc, children }: { id: string; title: string; desc: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b py-4"><div className="min-w-0"><Label htmlFor={id} className="font-semibold">{title}</Label><p className="text-sm text-muted-foreground">{desc}</p></div><div className="shrink-0">{children}</div></div>
+  );
+}
+
 function Preferences() {
   const { data, setData, resetAll } = useStore();
   const [pendingBackup, setPendingBackup] = useState<AppData | null>(null);
@@ -302,10 +302,9 @@ function Preferences() {
     const url = URL.createObjectURL(blob); const a = document.createElement("a");
     a.href = url; a.download = `iagenda-backup-${toISODate(new Date())}.json`; a.click(); URL.revokeObjectURL(url);
   };
-  const importData = (file: File) => file.text().then((t) => { try { const parsed = JSON.parse(t) as Partial<AppData>; const base = defaultData(); const restored = validateBackup({ ...base, ...parsed, profile: { ...base.profile, ...parsed.profile }, prefs: { ...base.prefs, ...parsed.prefs, ...normalizeAppearance(parsed.prefs) } }); setPendingBackup(restored); } catch { toast.error("Arquivo de backup inválido."); } }).catch(() => toast.error("Não foi possível ler o arquivo."));
-  const Row = ({ id, title, desc, children }: { id: string; title: string; desc: string; children: ReactNode }) => (
-    <div className="flex items-center justify-between gap-4 border-b py-4"><div className="min-w-0"><Label htmlFor={id} className="font-semibold">{title}</Label><p className="text-sm text-muted-foreground">{desc}</p></div><div className="shrink-0">{children}</div></div>
-  );
+  const importData = (file: File) => file.text().then((t) => {
+    try { setPendingBackup(restoreData(JSON.parse(t) as Partial<AppData>)); } catch { toast.error("Arquivo de backup inválido."); }
+  }).catch(() => toast.error("Não foi possível ler o arquivo."));
   return (
     <div className="space-y-3">
       <Row id="pr-notif" title="Notificações" desc="Avisos de lembretes enquanto o app estiver aberto."><Switch id="pr-notif" checked={data.prefs.notifications} onCheckedChange={toggleNotif} /></Row>

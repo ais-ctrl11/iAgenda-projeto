@@ -1,5 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useRef } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 import { DEFAULT_APPEARANCE, normalizeAppearance, type AppearancePrefs } from "./appearance";
 import { useAuth } from "@/components/app/auth-provider";
@@ -93,15 +101,31 @@ interface Ctx {
 }
 const StoreCtx = createContext<Ctx | null>(null);
 
+/** Fills missing fields of an old/partial backup with defaults, then validates it. Throws if invalid. */
+export function restoreData(parsed: Partial<AppData>): AppData {
+  const base = defaultData();
+  return validateBackup({
+    ...base,
+    ...parsed,
+    profile: { ...base.profile, ...parsed.profile },
+    prefs: { ...base.prefs, ...parsed.prefs, ...normalizeAppearance(parsed.prefs) },
+  });
+}
+
+/** Appends the incoming rows whose id is not already present. */
+function mergeNew<T extends { id: string }>(current: T[], incoming: T[]): T[] {
+  const known = new Set(current.map((x) => x.id));
+  return [...current, ...incoming.filter((x) => !known.has(x.id))];
+}
+
 /** Reads the pre-account localStorage data, if any, so it can be offered for import once. */
 function readLegacy(): AppData | null {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<AppData>;
-    const base = defaultData();
-    return validateBackup({ ...base, ...parsed, profile: { ...base.profile, ...parsed.profile }, prefs: { ...base.prefs, ...parsed.prefs, ...normalizeAppearance(parsed.prefs) } });
-  } catch { return null; }
+    return raw ? restoreData(JSON.parse(raw) as Partial<AppData>) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -140,10 +164,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           action: { label: "Importar", onClick: () => {
             const d = latest.current;
             const next = { ...d,
-              appointments: [...d.appointments, ...legacy.appointments.filter((x) => !d.appointments.some((y) => y.id === x.id))],
-              entries: [...d.entries, ...legacy.entries.filter((x) => !d.entries.some((y) => y.id === x.id))],
-              habits: [...d.habits, ...legacy.habits.filter((x) => !d.habits.some((y) => y.id === x.id))],
-              importantDays: [...d.importantDays, ...legacy.importantDays.filter((x) => !d.importantDays.some((y) => y.id === x.id))],
+              appointments: mergeNew(d.appointments, legacy.appointments),
+              entries: mergeNew(d.entries, legacy.entries),
+              habits: mergeNew(d.habits, legacy.habits),
+              importantDays: mergeNew(d.importantDays, legacy.importantDays),
             };
             latest.current = next; queue.edit(next); setRaw(next);
             toast.success("Dados importados");
@@ -221,8 +245,4 @@ export function recordsOn(data: AppData, date: string) {
     entries: data.entries.filter((e) => e.date === date).sort((a, b) => a.time.localeCompare(b.time)),
     habits: data.habits.filter((h) => h.date === date).sort((a, b) => a.time.localeCompare(b.time)),
   };
-}
-export function activityCount(data: AppData, date: string) {
-  const r = recordsOn(data, date);
-  return r.appointments.length + r.entries.length + r.habits.length;
 }

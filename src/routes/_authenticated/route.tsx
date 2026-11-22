@@ -8,7 +8,15 @@ export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
     const { data, error } = await supabase.auth.getSession();
-    if (error || !data.session) throw redirect({ to:"/auth" });
+    if (error || !data.session) throw redirect({ to: "/auth" });
   },
-  component: () => <StoreProvider><AddFlowProvider><AppShell><Outlet /></AppShell></AddFlowProvider></StoreProvider>,
+  component: () => (
+    <StoreProvider>
+      <AddFlowProvider>
+        <AppShell>
+          <Outlet />
+        </AppShell>
+      </AddFlowProvider>
+    </StoreProvider>
+  ),
 });

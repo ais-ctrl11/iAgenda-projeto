@@ -1,5 +1,6 @@
 import { Apple, Bed, Droplets, Dumbbell, Sparkles, Repeat, CalendarClock, type LucideIcon } from "lucide-react";
 import { STATUS_LABEL, type AppointmentStatus, type EntryType } from "@/lib/store";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
@@ -41,6 +42,10 @@ export function EmptyState({ icon: Icon, title, text, action }: { icon: LucideIc
       {action && <div className="mt-2">{action}</div>}
     </div>
   );
+}
+
+export function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return <div className="space-y-1.5"><Label htmlFor={id}>{label}</Label>{children}</div>;
 }
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string | undefined; actions?: ReactNode }) {

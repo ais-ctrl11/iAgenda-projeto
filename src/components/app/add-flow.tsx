@@ -1,15 +1,14 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { CalendarClock, Repeat, Sparkles, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { CATEGORY_LABEL, ENTRY_LABEL, nowTime, toISODate, useStore, type Appointment, type Category, type EntryType } from "@/lib/store";
-import { ENTRY_ICON, ENTRY_COLOR } from "./shared";
+import { ENTRY_ICON, ENTRY_COLOR, Field } from "./shared";
 import { cn } from "@/lib/utils";
 import { dateTimeSchema } from "@/lib/backup";
 
@@ -25,7 +24,8 @@ export function AddFlowProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ open: boolean; kind: Kind; date?: string | undefined; edit?: Appointment | undefined }>({ open: false, kind: "menu" });
   const isMobile = useIsMobile();
   const close = () => setState((s) => ({ ...s, open: false }));
-  const ctx: AddCtx = { open: (k = "menu", o) => { if (ready) setState({ open: true, kind: k, date: o?.date, edit: o?.edit }); } };
+  // Stable between renders so consumers of useAdd() don't re-render on every store change.
+  const ctx = useMemo<AddCtx>(() => ({ open: (k = "menu", o) => { if (ready) setState({ open: true, kind: k, date: o?.date, edit: o?.edit }); } }), [ready]);
 
   const titles: Record<Kind, [string, string]> = {
     menu: ["O que você quer registrar?", "Escolha uma ação rápida."],
@@ -92,10 +92,6 @@ function Menu({ onPick }: { onPick: (k: Kind) => void }) {
       ))}
     </div>
   );
-}
-
-function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
-  return <div className="space-y-1.5"><Label htmlFor={id}>{label}</Label>{children}</div>;
 }
 
 function AppointmentForm({ date, edit, onDone }: { date?: string | undefined; edit?: Appointment | undefined; onDone: () => void }) {
