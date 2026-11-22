@@ -1,15 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { recordsOn, toISODate, useStore } from "@/lib/store";
-import { PageHeader } from "@/components/app/shared";
-import { ENTRY_DOT } from "@/components/app/shared";
+import { toISODate, useStore, type ImportantDay } from "@/lib/store";
+import { ENTRY_DOT, PageHeader } from "@/components/app/shared";
 import { DayRecords } from "@/components/app/day-records";
 import { cn } from "@/lib/utils";
 import { monthCells } from "@/lib/calendar-math";
+import { indexRecordsByDate, type DayRecordsIndex } from "@/lib/records-index";
+
+const NO_RECORDS: DayRecordsIndex = { appointments: [], entries: [], habits: [] };
+const NO_IMPORTANT: ImportantDay[] = [];
 
 export const Route = createFileRoute("/_authenticated/calendario")({
   head: () => ({
@@ -32,6 +35,17 @@ function Calendario() {
   const [selected, setSelected] = useState(() => toISODate(new Date()));
   const ws = data.prefs.weekStartsMonday ? 1 : 0;
   const today = toISODate(new Date());
+  // Group once per data change instead of filtering all records for every calendar cell.
+  const records = useMemo(() => indexRecordsByDate(data), [data]);
+  const importantByDate = useMemo(() => {
+    const map = new Map<string, ImportantDay[]>();
+    for (const x of data.importantDays) {
+      const list = map.get(x.date);
+      if (list) list.push(x);
+      else map.set(x.date, [x]);
+    }
+    return map;
+  }, [data.importantDays]);
 
   const start = view === "mes" ? startOfWeek(startOfMonth(cursor), { weekStartsOn: ws }) : startOfWeek(cursor, { weekStartsOn: ws });
   const end = view === "mes" ? endOfWeek(endOfMonth(cursor), { weekStartsOn: ws }) : endOfWeek(cursor, { weekStartsOn: ws });
@@ -59,8 +73,8 @@ function Calendario() {
             {Array.from({ length: 12 }, (_, month) => {
               const monthDate = new Date(cursor.getFullYear(), month, 1);
               const first = startOfWeek(monthDate, { weekStartsOn: ws });
-               const cells = monthCells(monthDate, ws);
-              return <section key={month} className="rounded-2xl border p-3"><button className="mb-2 font-semibold capitalize text-primary" onClick={() => { setCursor(monthDate); setView("mes"); }}>{format(monthDate, "MMMM", { locale: ptBR })}</button><div className="grid grid-cols-7 text-center text-[10px] text-muted-foreground">{Array.from({ length: 7 }, (_, i) => <span key={i}>{format(addDays(first, i), "EEEEE", { locale: ptBR })}</span>)}</div><div className="grid grid-cols-7 text-center text-xs">{cells.map((d,i)=>{ const iso=toISODate(d); const important=data.importantDays.some(x=>x.date===iso.slice(5)); return <button key={i} onClick={()=>{setSelected(iso);setCursor(monthDate)}} aria-label={`${iso}${important?", data importante":""}`} className={cn("m-0.5 grid aspect-square place-items-center rounded-full", !isSameMonth(d,monthDate)&&"opacity-25", iso===today&&"bg-primary text-primary-foreground", important&&"ring-2 ring-accent")}>{d.getDate()}</button>; })}</div></section>;
+              const cells = monthCells(monthDate, ws);
+              return <section key={month} className="rounded-2xl border p-3"><button className="mb-2 font-semibold capitalize text-primary" onClick={() => { setCursor(monthDate); setView("mes"); }}>{format(monthDate, "MMMM", { locale: ptBR })}</button><div className="grid grid-cols-7 text-center text-[10px] text-muted-foreground">{Array.from({ length: 7 }, (_, i) => <span key={i}>{format(addDays(first, i), "EEEEE", { locale: ptBR })}</span>)}</div><div className="grid grid-cols-7 text-center text-xs">{cells.map((d,i)=>{ const iso=toISODate(d); const important=importantByDate.has(iso.slice(5)); return <button key={i} onClick={()=>{setSelected(iso);setCursor(monthDate)}} aria-label={`${iso}${important?", data importante":""}`} className={cn("m-0.5 grid aspect-square place-items-center rounded-full", !isSameMonth(d,monthDate)&&"opacity-25", iso===today&&"bg-primary text-primary-foreground", important&&"ring-2 ring-accent")}>{d.getDate()}</button>; })}</div></section>;
             })}
           </div> : <>
           <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase text-muted-foreground">
@@ -68,7 +82,7 @@ function Calendario() {
           </div>
           <div className="grid grid-cols-7 gap-1">
             {days.map((d) => {
-              const iso = toISODate(d); const r = recordsOn(data, iso); const important = data.importantDays.filter((x) => x.date === iso.slice(5));
+              const iso = toISODate(d); const r = records.get(iso) ?? NO_RECORDS; const important = importantByDate.get(iso.slice(5)) ?? NO_IMPORTANT;
               const inMonth = view === "semana" || isSameMonth(d, cursor);
               return (
                 <button key={iso} onClick={() => setSelected(iso)} aria-pressed={selected === iso}
@@ -81,7 +95,7 @@ function Calendario() {
                     {r.appointments.length > 0 && <span className="size-1.5 rounded-full bg-future md:size-2" />}
                     {r.entries.slice(0, 3).map((e) => <span key={e.id} className={cn("size-1.5 rounded-full md:size-2", ENTRY_DOT[e.type])} />)}
                     {r.habits.length > 0 && <span className="size-1.5 rounded-full bg-habit md:size-2" />}
-                  {important.length > 0 && <span className="size-1.5 rounded-full bg-accent-foreground md:size-2" title={important.map((x) => x.name).join(", ")} />}
+                    {important.length > 0 && <span className="size-1.5 rounded-full bg-accent-foreground md:size-2" title={important.map((x) => x.name).join(", ")} />}
                   </span>
                   {important.length > 0 && <span className="hidden w-full truncate rounded bg-accent px-1 text-left text-[11px] font-medium text-accent-foreground md:block">{important[0]?.name}{important.length > 1 ? ` +${important.length - 1}` : ""}</span>}
                   {view === "semana" && <span className="hidden w-full space-y-0.5 text-left md:block">
@@ -99,7 +113,7 @@ function Calendario() {
           </div>
         </div>
         <div className="lg:card-soft lg:p-5">
-          {data.importantDays.filter((x) => x.date === selected.slice(5)).map((x) => <p key={x.id} className="mb-3 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground">🎉 {x.name}</p>)}
+          {(importantByDate.get(selected.slice(5)) ?? NO_IMPORTANT).map((x) => <p key={x.id} className="mb-3 rounded-2xl bg-accent px-4 py-3 text-sm font-semibold text-accent-foreground">🎉 {x.name}</p>)}
           <DayRecords date={selected} /></div>
       </div>
     </div>

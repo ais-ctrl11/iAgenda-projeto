@@ -17,7 +17,9 @@ const NAV = [
   { to: "/calendario", label: "Calendário", icon: CalendarDays },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ] as const;
-const DESKTOP_NAV = NAV;
+
+/** Shorter labels for the cramped mobile tab bar; anything else uses its full label. */
+const MOBILE_LABEL: Partial<Record<string, string>> = { Compromissos: "Agenda", Configurações: "Ajustes" };
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { open } = useAdd();
@@ -47,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Plus className="size-5" /> <span className="hidden lg:inline">Adicionar</span>
         </Button>
         <nav className="flex flex-1 flex-col gap-1" aria-label="Principal">
-          {DESKTOP_NAV.map((n) => {
+          {NAV.map((n) => {
             const active = n.to === "/" ? path === "/" : path.startsWith(n.to);
             return (
               <Link key={n.to} to={n.to} title={n.label}
@@ -90,7 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function MobileTab({ to, label, icon: Icon, path }: { to: (typeof NAV)[number]["to"]; label: string; icon: typeof Plus; path: string }) {
   const active = to === "/" ? path === "/" : path.startsWith(to);
-  const short = label === "Compromissos" ? "Agenda" : label === "Estatísticas" ? "Estatísticas" : label === "Configurações" ? "Ajustes" : label;
+  const short = MOBILE_LABEL[label] ?? label;
   return (
     <Link to={to} aria-label={label} aria-current={active ? "page" : undefined}
       className={cn("flex h-14 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] font-medium", active ? "text-primary" : "text-muted-foreground")}>

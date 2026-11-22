@@ -42,7 +42,11 @@ function Compromissos() {
   const sorted = useMemo(() => [...data.appointments].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)), [data.appointments]);
   const withStatus = sorted.map((a) => ({ a, st: appointmentStatus(a) }));
   const water = data.entries.filter((e) => e.type === "agua" && e.date === today).reduce((s, e) => s + (e.value ?? 1), 0);
-  const lastSleep = [...data.entries].filter((e) => e.type === "sono").sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time))[0];
+  // Most recent sleep entry (first one wins on ties), without copying and sorting every entry.
+  const lastSleep = data.entries.reduce<(typeof data.entries)[number] | undefined>((best, e) => {
+    if (e.type !== "sono") return best;
+    return !best || (e.date + e.time).localeCompare(best.date + best.time) > 0 ? e : best;
+  }, undefined);
   const todayCount = withStatus.filter((x) => x.a.date === today).length;
   const sel = data.appointments.find((a) => a.id === selected) ?? null;
 
